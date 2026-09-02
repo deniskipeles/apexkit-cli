@@ -1,0 +1,43 @@
+{
+  "name": "@apexkit/cli",
+  "version": "1.0.0",
+  "description": "The official CLI and developer sync engine for ApexKit",
+  "type": "module",
+  "main": "./src/index.js",
+  "bin": {
+    "apexkit": "./bin/apexkit.js",
+    "apex": "./bin/apexkit.js"
+  },
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/deniskipeles/apexkit-cli.git"
+  },
+  "dependencies": {
+    "ws": "^8.18.0"
+  },
+  "files": [
+    "bin",
+    "src",
+    "README.md"
+  ],
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "keywords": [
+    "apexkit",
+    "baas",
+    "cli",
+    "devtools",
+    "sync",
+    "watch"
+  ],
+  "author": "deniskipeles",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/deniskipeles/apexkit-cli/issues"
+  },
+  "homepage": "https://github.com/deniskipeles/apexkit-cli#readme"
+}
