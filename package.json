@@ -5,8 +5,8 @@
   "type": "module",
   "main": "./src/index.js",
   "bin": {
-    "apexkit": "./bin/apexkit.js",
-    "apex": "./bin/apexkit.js"
+    "apexkit": "bin/apexkit.js",
+    "apex": "bin/apexkit.js"
   },
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1"
