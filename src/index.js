@@ -141,7 +141,7 @@ const TRIGGER_DEFINITIONS = [
   { id: "graphql", name: "graphql (Custom Resolver)", desc: "Dynamic Query/Mutation field resolver for GraphQL schema." }
 ];
 
-// --- 4. WORKSPACE TYPES & CONFIG GENERATOR ---
+// --- 4. ACCURATE WORKSPACE TYPES & CONFIG GENERATOR ---
 async function generateWorkspaceFiles() {
   console.log("  ⏳ Fetching collection schemas from DB...");
   let collectionsData = [];
@@ -155,6 +155,34 @@ async function generateWorkspaceFiles() {
     console.warn(`  ⚠️ Could not connect to DB for schemas: ${err.message}`);
   }
 
+  // Pre-calculate lookup maps for collection IDs and Names
+  const colIdToName = new Map();
+  const colNameToId = new Map();
+  collectionsData.forEach((col) => {
+    colIdToName.set(String(col.id), col.name);
+    colNameToId.set(col.name, col.id);
+  });
+
+  // Calculate Reverse Relations: Target Collection Name -> Array of Reverse Link Definitions
+  const reverseRelationsMap = new Map();
+  collectionsData.forEach((originCol) => {
+    if (originCol.schema?.relations) {
+      for (const [relName, relDef] of Object.entries(originCol.schema.relations)) {
+        const rawTarget = relDef.target_collection;
+        const targetName = colIdToName.get(String(rawTarget)) || rawTarget;
+
+        if (!reverseRelationsMap.has(targetName)) {
+          reverseRelationsMap.set(targetName, []);
+        }
+        reverseRelationsMap.get(targetName).push({
+          originCollection: originCol.name,
+          relationFieldName: relName,
+          cardinality: relDef.relation_type, // 'many' or 'one'
+        });
+      }
+    }
+  });
+
   let collectionTypesStr = `export interface Collections {\n`;
   let collectionExpandsStr = `export interface CollectionExpands {\n`;
   const collectionNames = [];
@@ -165,6 +193,7 @@ async function generateWorkspaceFiles() {
     let expandsStr = "";
 
     if (col.schema) {
+      // 1. STANDARD FIELDS
       if (col.schema.fields) {
         for (const [name, def] of Object.entries(col.schema.fields)) {
           let tsType = "any";
@@ -183,6 +212,7 @@ async function generateWorkspaceFiles() {
               break;
             case "owner":
             case "relation":
+              // ✅ Foreign keys and owners are ALWAYS scalar IDs on the record itself
               tsType = "number | string";
               break;
             case "boolean":
@@ -206,21 +236,59 @@ async function generateWorkspaceFiles() {
           }
           const safeName = /^[a-zA-Z_$][a-zA-Z0-9_$]*$/.test(name) ? name : `"${name}"`;
           fieldsStr += `    ${safeName}${def.required ? "" : "?"}: ${tsType};\n`;
+
+          // If it's an Owner field, it expands to the User Profile map
+          if (def.type === "owner") {
+            expandsStr += `    ${safeName}?: { id: number | string; email: string; role: string; metadata?: Record<string, any> };\n`;
+          }
         }
       }
 
+      // 2. FORWARD RELATIONS (Directly on this collection)
       if (col.schema.relations) {
         for (const [name, rel] of Object.entries(col.schema.relations)) {
-          const isMany = rel.relation_type === "many";
-          const tsType = isMany ? "(number | string)[]" : "number | string";
+          const rawTarget = rel.target_collection;
+          const targetColName = colIdToName.get(String(rawTarget)) || rawTarget;
           const safeName = /^[a-zA-Z_$][a-zA-Z0-9_$]*$/.test(name) ? name : `"${name}"`;
-          fieldsStr += `    ${safeName}${rel.required ? "" : "?"}: ${tsType};\n`;
 
-          const targetCol = rel.target_collection;
-          const expandType = `{ id: number | string; data: Collections["${targetCol}"]; created: string; updated: string; expand?: any }`;
-          expandsStr += `    ${safeName}?: ${isMany ? `Array<${expandType}>` : expandType};\n`;
+          // ✅ BULLETPROOF RULE 1:
+          // A record holding the foreign key field stores a SCALAR foreign key ID, NEVER an array.
+          fieldsStr += `    ${safeName}${rel.required ? "" : "?"}: number | string;\n`;
+
+          // ✅ BULLETPROOF RULE 2:
+          // Forward expansion from the foreign key field points to ONE target record.
+          // It is ALWAYS a Map/Object, NEVER an array!
+          const targetRecordType = `Collections["${targetColName}"]`;
+          const expandSingleType = `{ id: number | string; data: ${targetRecordType}; created: string; updated: string; expand?: any }`;
+
+          expandsStr += `    ${safeName}?: ${expandSingleType};\n`;
         }
       }
+
+      // 3. REVERSE RELATIONS (Parent expanding children)
+      const reverseLinks = reverseRelationsMap.get(col.name) || [];
+      const fieldCountByName = new Map();
+      reverseLinks.forEach((rev) => {
+        fieldCountByName.set(rev.originCollection, (fieldCountByName.get(rev.originCollection) || 0) + 1);
+      });
+
+      reverseLinks.forEach((rev) => {
+        const isDuplicate = (fieldCountByName.get(rev.originCollection) || 0) > 1;
+        const revKey = isDuplicate ? `${rev.originCollection}_via_${rev.relationFieldName}` : rev.originCollection;
+        const safeRevKey = /^[a-zA-Z_$][a-zA-Z0-9_$]*$/.test(revKey) ? revKey : `"${revKey}"`;
+
+        const originRecordType = `Collections["${rev.originCollection}"]`;
+        const childRecordType = `{ id: number | string; data: ${originRecordType}; created: string; updated: string; expand?: any }`;
+
+        // ✅ BULLETPROOF RULE 3:
+        // Only return an Array when reverse-expanded from parent AND cardinality is 'many'.
+        // If the reverse relation is unique ('one'), return a single Map/Object.
+        if (rev.cardinality === "one") {
+          expandsStr += `    ${safeRevKey}?: ${childRecordType};\n`;
+        } else {
+          expandsStr += `    ${safeRevKey}?: Array<${childRecordType}>;\n`;
+        }
+      });
     }
 
     collectionTypesStr += `  "${col.name}": {\n${fieldsStr}  };\n`;
@@ -484,7 +552,7 @@ declare global {
 export {};
 `;
   fs.writeFileSync("apexkit.d.ts", types.trim());
-  console.log("  📄 Generated apexkit.d.ts with Engine & Collection Typings");
+  console.log("  📄 Generated apexkit.d.ts with Accurate Scaled & Relational Typings");
 
   const jsconfig = {
     compilerOptions: {
