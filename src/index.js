@@ -528,9 +528,57 @@ declare global {
     base64EncodeBuffer(buffer: ArrayBuffer | Uint8Array): string;
     base64Decode(text: string): string;
     base64DecodeBuffer(text: string): ArrayBuffer;
+    textEncode(text: string): ArrayBuffer;
+    textDecode(data: ArrayBuffer | Uint8Array): string;
+    hexEncode(data: string | ArrayBuffer | Uint8Array): string;
+    hexDecode(hex: string): ArrayBuffer;
     sleep(ms: number): Promise<void>;
     randomHex(len?: number): string;
   };
+
+  /** Standard Web APIs */
+  const crypto: {
+    randomUUID(): string;
+    getRandomValues<T extends Int8Array | Int16Array | Int32Array | Uint8Array | Uint16Array | Uint32Array | Uint8ClampedArray | Float32Array | Float64Array | DataView | null>(array: T): T;
+    subtle: {
+      digest(algorithm: string | any, data: ArrayBuffer | Uint8Array): Promise<ArrayBuffer>;
+      importKey(format: string, keyData: any, algo: any, extractable: boolean, usages: string[]): Promise<any>;
+      sign(algorithm: string | any, key: any, data: ArrayBuffer | Uint8Array): Promise<ArrayBuffer>;
+      verify(algorithm: string | any, key: any, signature: ArrayBuffer | Uint8Array, data: ArrayBuffer | Uint8Array): Promise<boolean>;
+    }
+  };
+
+  class Blob {
+    constructor(sources?: any[], options?: any);
+    arrayBuffer(): Promise<ArrayBuffer>;
+    text(): Promise<string>;
+    readonly size: number;
+    readonly type: string;
+  }
+
+  class ReadableStream {
+    constructor(underlyingSource?: any);
+    getReader(): any;
+    cancel(): Promise<void>;
+    readonly locked: boolean;
+  }
+
+  const btoa: (data: string) => string;
+  const atob: (data: string) => string;
+
+  class TextEncoder {
+    constructor(encoding?: string);
+    encode(input?: string): Uint8Array;
+    encodeInto(source: string, destination: Uint8Array): { read: number; written: number };
+  }
+
+  class TextDecoder {
+    constructor(label?: string, options?: { fatal?: boolean; ignoreBOM?: boolean });
+    decode(input?: ArrayBuffer | Uint8Array, options?: { stream?: boolean }): string;
+  }
+
+  function setTimeout(callback: Function, ms: number): string;
+  function clearTimeout(id: string): void;
 
   /** Environment & Configuration Secrets Accessor */
   const $env: {
