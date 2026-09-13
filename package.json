@@ -1,6 +1,6 @@
 {
   "name": "@apexkit/cli",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "description": "The official CLI and developer sync engine for ApexKit",
   "type": "module",
   "main": "./src/index.js",
