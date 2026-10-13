@@ -138,7 +138,10 @@ const TRIGGER_DEFINITIONS = [
   { id: "after_ai_run", name: "after_ai_run", desc: "Runs after AI Prompt execution." },
   { id: "on_vectorization_start", name: "on_vectorization_start", desc: "Fires when revectorization job begins." },
   { id: "cron", name: "cron (Scheduled Job)", desc: "Executed periodically according to Cron expression settings." },
-  { id: "graphql", name: "graphql (Custom Resolver)", desc: "Dynamic Query/Mutation field resolver for GraphQL schema." }
+  { id: "graphql", name: "graphql (Custom Resolver)", desc: "Dynamic Query/Mutation field resolver for GraphQL schema." },
+  { id: "before_realtime_connection_established", name: "before_realtime_connection_established", desc: "Runs before an incoming SSE or WebSocket connection is accepted. Can block connections." },
+  { id: "before_realtime_data_pushed", name: "before_realtime_data_pushed", desc: "Intercepts and mutates real-time event payloads right before sending to a client." },
+  { id: "after_realtime_connection_desconnected", name: "after_realtime_connection_desconnected", desc: "Runs after an SSE or WebSocket client disconnects or connection is dropped." },
 ];
 
 // --- 4. AUTOMATED REMOTE TYPE RESOLUTION & SCANNER ---
@@ -1001,6 +1004,62 @@ export default async function (event) {
 }
 `;
 
+    case "before_realtime_connection_established":
+      return `${header}/**
+ * Hook: before_realtime_connection_established
+ * Intercepts incoming Realtime connections before upgrading/accepting.
+ *
+ * @param {{ trigger: string, data: { ip: string, protocol: 'sse' | 'websocket', headers: Record<string, string> }, auth: import("${typeImportPath}").AuthContext | null }} event
+ */
+export default async function (event) {
+  const { ip, protocol, headers } = event.data;
+
+  // Example: Block suspicious user-agents or IPs (throwing an error drops the connection)
+  // if (headers["user-agent"]?.includes("BadBot")) {
+  //   throw new Error("Connection denied");
+  // }
+
+  return true;
+}
+`;
+
+    case "before_realtime_data_pushed":
+      return `${header}/**
+ * Hook: before_realtime_data_pushed
+ * Intercepts event data just before broadcasting to the connected client.
+ *
+ * @param {{ trigger: string, data: any, auth: import("${typeImportPath}").AuthContext | null }} event
+ * @returns {Promise<any>} Return modified payload, or throw an error to send an empty object {}
+ */
+export default async function (event) {
+  const eventPayload = event.data;
+
+  // Example: Redact sensitive information before the client receives it
+  // (NOTE: $realtime.send is blocked inside this hook to avoid infinite loops)
+  // if (eventPayload.data && eventPayload.data.internal_secret) {
+  //   delete eventPayload.data.internal_secret;
+  // }
+
+  return eventPayload;
+}
+`;
+
+    case "after_realtime_connection_desconnected":
+      return `${header}/**
+ * Hook: after_realtime_connection_desconnected
+ * Fires asynchronously when a client stream/socket disconnects or drops.
+ *
+ * @param {{ trigger: string, data: { ip: string, protocol: 'sse' | 'websocket', headers: Record<string, string> }, auth: import("${typeImportPath}").AuthContext | null }} event
+ */
+export default async function (event) {
+  const { ip, protocol } = event.data;
+
+  console.log(\`Client disconnected (\${protocol}) from \${ip}\`);
+
+  return true;
+}
+`;
+
     default:
       return `${header}/**
  * Trigger: ${triggerType}
@@ -1061,7 +1120,7 @@ async function runInitFile() {
       console.log(`  ${String(i + 1).padStart(2, " ")}) ${t.name}`);
     });
 
-    const trigChoice = parseInt((await rl.question("\nChoice (1-42) [1]: ")).trim() || "1", 10);
+    const trigChoice = parseInt((await rl.question("\nChoice (1-45) [1]: ")).trim() || "1", 10);
     const selectedTrig = TRIGGER_DEFINITIONS[trigChoice - 1] || TRIGGER_DEFINITIONS[0];
     triggerType = selectedTrig.id;
 
